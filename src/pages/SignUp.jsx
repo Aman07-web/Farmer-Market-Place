@@ -42,7 +42,7 @@ const SignUp = () => {
             <label className="text-sm font-medium text-green-deep block">First Name</label>
             <input 
               type="text" 
-              placeholder="Ramesh" 
+              placeholder="First Name" 
               className="w-full bg-cream-dark rounded-xl px-4 py-3 text-sm text-[#4a4a4a] border border-transparent focus:border-green-fresh focus:bg-white focus:outline-none transition-all duration-300 placeholder-gray-400"
             />
           </div>
@@ -51,7 +51,7 @@ const SignUp = () => {
             <label className="text-sm font-medium text-green-deep block">Last Name</label>
             <input 
               type="text" 
-              placeholder="Patel" 
+              placeholder="Last Name" 
               className="w-full bg-cream-dark rounded-xl px-4 py-3 text-sm text-[#4a4a4a] border border-transparent focus:border-green-fresh focus:bg-white focus:outline-none transition-all duration-300 placeholder-gray-400"
             />
           </div>
