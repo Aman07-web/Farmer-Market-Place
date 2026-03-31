@@ -1,22 +1,54 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
+import { validateEmail, validatePhone } from '../utils/helper';
 
 const Login = () => {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const [role, setRole] = useState('buyer'); // 'farmer' or 'buyer'
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError(null);
+    
+    if (!agreed) {
+      setError('You must agree to the terms to sign in.');
+      return;
+    }
+
     setLoading(true);
+    let loginEmail = identifier;
 
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
+      // If identifier is a phone number, look up the email
+      if (validatePhone(identifier)) {
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('email_address')
+          .eq('phone_number', identifier)
+          .eq('role', role) // Check for matching role even during phone lookup
+          .single();
+
+        if (profileError || !profile) {
+          setError(`No ${role} account found with this phone number.`);
+          setLoading(false);
+          return;
+        }
+        loginEmail = profile.email_address;
+      } else if (!validateEmail(identifier)) {
+        setError('Please enter a valid email or 10-digit phone number.');
+        setLoading(false);
+        return;
+      }
+
+      const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
+        email: loginEmail,
         password,
       });
 
@@ -26,7 +58,21 @@ const Login = () => {
         return;
       }
 
-      navigate('/dashboard');
+      // Final Role matching check after Auth success
+      const { data: profileTest, error: profileTestError } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', authData.user.id)
+        .eq('role', role)
+        .single();
+      
+      if (profileTestError || !profileTest) {
+        setError(`You do not have a ${role} profile associated with this account.`);
+        setLoading(false);
+        return;
+      }
+
+      navigate(`/${role}-dashboard`);
     } catch (err) {
       console.error(err);
       setError('An unexpected error occurred. Please try again.');
@@ -47,8 +93,26 @@ const Login = () => {
             <span className="text-green-deep">Agro</span>
             <span className="text-amber">Connect</span>
           </Link>
-          <h2 className="font-playfair text-2xl font-bold text-green-deep mb-2">Welcome Back</h2>
-          <p className="text-[#4a4a4a] text-sm">Sign in to your account</p>
+          <h2 className="font-playfair text-2xl font-bold text-green-deep mb-2">{role.charAt(0).toUpperCase() + role.slice(1)} Login</h2>
+          <p className="text-[#4a4a4a] text-sm">Access your {role} dashboard</p>
+        </div>
+
+        {/* Role Selector */}
+        <div className="flex bg-cream-dark p-1 rounded-xl mb-8">
+          <button 
+            type="button"
+            onClick={() => setRole('buyer')}
+            className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-all duration-300 ${role === 'buyer' ? 'bg-white text-green-deep shadow-sm' : 'text-gray-500'}`}
+          >
+            🛒 Buyer
+          </button>
+          <button 
+            type="button"
+            onClick={() => setRole('farmer')}
+            className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-all duration-300 ${role === 'farmer' ? 'bg-white text-green-deep shadow-sm' : 'text-gray-500'}`}
+          >
+            👨‍🌾 Farmer
+          </button>
         </div>
 
         {error && (
@@ -59,13 +123,13 @@ const Login = () => {
 
         <form className="space-y-5" onSubmit={handleLogin}>
           <div className="space-y-1.5 text-left">
-            <label className="text-sm font-medium text-green-deep block">Email Address</label>
+            <label className="text-sm font-medium text-green-deep block">Email or Phone Number</label>
             <input 
-              type="email" 
+              type="text" 
               required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="name@example.com" 
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              placeholder="name@example.com or 10-digit number" 
               className="w-full bg-cream-dark rounded-xl px-4 py-3 text-sm text-[#4a4a4a] border border-transparent focus:border-green-fresh focus:bg-white focus:outline-none transition-all duration-300 placeholder-gray-400"
             />
           </div>
@@ -75,20 +139,42 @@ const Login = () => {
               <label className="text-sm font-medium text-green-deep block">Password</label>
               <a href="#" className="text-xs font-semibold text-amber hover:text-amber-light transition-colors">Forgot?</a>
             </div>
+            <div className="relative">
+              <input 
+                type={showPassword ? "text" : "password"} 
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••" 
+                className="w-full bg-cream-dark rounded-xl px-4 py-3 text-sm text-[#4a4a4a] border border-transparent focus:border-green-fresh focus:bg-white focus:outline-none transition-all duration-300 placeholder-gray-400 pr-12"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-lg opacity-50 hover:opacity-100 transition-opacity"
+              >
+                {showPassword ? '👁️' : '🔒'}
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-2 mt-2">
             <input 
-              type="password" 
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••" 
-              className="w-full bg-cream-dark rounded-xl px-4 py-3 text-sm text-[#4a4a4a] border border-transparent focus:border-green-fresh focus:bg-white focus:outline-none transition-all duration-300 placeholder-gray-400"
+              type="checkbox" 
+              required 
+              checked={agreed}
+              onChange={(e) => setAgreed(e.target.checked)}
+              className="mt-1 accent-green-deep" 
             />
+            <span className="text-xs text-gray-500 leading-normal">
+              I agree to the <a href="#" className="text-green-deep font-bold hover:underline">Terms of Service</a>
+            </span>
           </div>
 
           <button 
             type="submit" 
-            disabled={loading}
-            className={`w-full bg-green-deep text-white rounded-xl py-3.5 text-sm font-bold shadow-md hover:bg-green-mid transition-all duration-300 mt-2 ${loading ? 'opacity-70 cursor-not-allowed' : 'hover:-translate-y-[1px] hover:shadow-[0_6px_20px_rgba(45,106,79,0.35)]'}`}
+            disabled={loading || !agreed}
+            className={`w-full bg-green-deep text-white rounded-xl py-3.5 text-sm font-bold shadow-md hover:bg-green-mid transition-all duration-300 mt-2 ${loading || !agreed ? 'opacity-50 cursor-not-allowed' : 'hover:-translate-y-[1px] hover:shadow-[0_6px_20px_rgba(45,106,79,0.35)]'}`}
           >
             {loading ? 'Signing In...' : 'Sign In'}
           </button>

@@ -1,7 +1,38 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 const Hero = () => {
+  const { user, profile } = useAuth();
+
+  const renderCTAButtons = () => {
+    if (user && profile?.role === 'farmer') {
+      return (
+        <Link to="/farmer-dashboard" className="bg-green-deep text-white px-[2rem] py-[0.85rem] rounded-full font-dmsans text-[1rem] font-semibold hover:bg-green-mid hover:-translate-y-[2px] transition-all duration-300 hover:shadow-[0_10px_30px_rgba(26,58,42,0.3)] shadow-md">
+          🌾 Sell Your Produce
+        </Link>
+      );
+    }
+    if (user && profile?.role === 'buyer') {
+      return (
+        <Link to="/products" className="bg-green-deep text-white px-[2rem] py-[0.85rem] rounded-full font-dmsans text-[1rem] font-semibold hover:bg-green-mid hover:-translate-y-[2px] transition-all duration-300 hover:shadow-[0_10px_30px_rgba(26,58,42,0.3)] shadow-md">
+          🛒 Start Shopping
+        </Link>
+      );
+    }
+    // Not logged in — show both
+    return (
+      <>
+        <Link to="/products" className="bg-green-deep text-white px-[2rem] py-[0.85rem] rounded-full font-dmsans text-[1rem] font-semibold hover:bg-green-mid hover:-translate-y-[2px] transition-all duration-300 hover:shadow-[0_10px_30px_rgba(26,58,42,0.3)] shadow-md">
+          🛒 Start Shopping
+        </Link>
+        <Link to="/signup" className="border-[1.5px] border-green-deep text-green-deep bg-transparent px-[2rem] py-[0.85rem] rounded-full font-dmsans text-[1rem] font-semibold hover:bg-green-deep hover:text-white transition-all duration-300">
+          Sell Your Produce →
+        </Link>
+      </>
+    );
+  };
+
   return (
     <section className="min-h-screen relative flex items-center pt-[8rem] pb-[4rem] px-[5%] overflow-hidden">
       {/* Background Effects */}
@@ -30,13 +61,9 @@ const Hero = () => {
             AgroConnect connects farmers directly with buyers — no middlemen, fair prices, and the freshest produce from fields across India.
           </p>
 
+          {/* ── ROLE-AWARE CTA BUTTONS ── */}
           <div className="flex flex-wrap gap-4 animate-fadeUp" style={{ animationDelay: '0.65s', opacity: 0 }}>
-            <Link to="/products" className="bg-green-deep text-white px-[2rem] py-[0.85rem] rounded-full font-dmsans text-[1rem] font-semibold hover:bg-green-mid hover:-translate-y-[2px] transition-all duration-300 hover:shadow-[0_10px_30px_rgba(26,58,42,0.3)] shadow-md cursor-pointer">
-              🛒 Start Shopping
-            </Link>
-            <Link to="/signup" className="border-[1.5px] border-green-deep text-green-deep bg-transparent px-[2rem] py-[0.85rem] rounded-full font-dmsans text-[1rem] font-semibold hover:bg-green-deep hover:text-white transition-all duration-300 cursor-pointer">
-              Sell Your Produce →
-            </Link>
+            {renderCTAButtons()}
           </div>
 
           <div className="flex flex-row flex-wrap sm:gap-[2.5rem] gap-[1.5rem] mt-4 animate-fadeUp" style={{ animationDelay: '0.8s', opacity: 0 }}>
