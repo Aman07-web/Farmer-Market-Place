@@ -23,6 +23,8 @@ const FarmerDashboard = () => {
   const [productToDelete, setProductToDelete] = useState(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [processingOrders, setProcessingOrders] = useState({});
+  const [escrowNotification, setEscrowNotification] = useState({ show: false, orderId: null, amount: 0 });
   
   // Form State
   const [formData, setFormData] = useState({
@@ -151,7 +153,7 @@ const FarmerDashboard = () => {
     }
   }, [userLocation, locationName]);
 
-  const tabs = ['Dashboard', 'My Products', 'Orders', 'Analytics', 'Settings'];
+  const tabs = ['Dashboard', 'My Products', 'Orders', 'Payment Track', 'Analytics', 'Settings'];
 
   useEffect(() => {
     if (!user && !loading) {
@@ -205,7 +207,12 @@ const FarmerDashboard = () => {
           schema: 'public', 
           table: 'orders',
           filter: `farmer_id=eq.${user?.id}`
-      }, () => {
+      }, (payload) => {
+          console.log("Realtime Update for Farmer:", payload);
+          if (payload.new && payload.new.status === 'PAID') {
+              setEscrowNotification({ show: true, orderId: payload.new.id, amount: payload.new.total_price });
+              setTimeout(() => setEscrowNotification({ show: false, orderId: null, amount: 0 }), 8000);
+          }
           fetchMyOrders();
       })
       .subscribe();
@@ -425,7 +432,7 @@ const FarmerDashboard = () => {
     setProcessingOrders(prev => ({ ...prev, [orderId]: true }));
     try {
         // CALL NEW BACKEND API
-        const response = await fetch('http://localhost:5000/api/orders/update-status', {
+        const response = await fetch('http://localhost:5000/api/escrow/update-status', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -442,15 +449,14 @@ const FarmerDashboard = () => {
         setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
         
         // Data Refresh
-        fetchFarmerOrders();
+        fetchMyOrders();
         fetchMyProducts(); 
 
-        if (newStatus === 'confirmed') alert("Order Approved & Stock Deducted! 🚜✅");
-        else if (newStatus === 'delivered') alert("Order marked as Delivered! 📦✨");
+        // Status updated silently — no popup
 
     } catch (err) {
         console.error("Status update failed:", err);
-        alert("Update Error: " + err.message);
+        // Error logged silently — no popup
     } finally {
         setProcessingOrders(prev => ({ ...prev, [orderId]: false }));
     }
@@ -599,13 +605,15 @@ const FarmerDashboard = () => {
                                     <td className="p-6">
                                         <div className="flex flex-col items-start gap-1">
                                             <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase ${
-                                                order.status === 'pending' ? 'bg-amber/20 text-amber' : 
+                                                (order.status === 'pending' || order.status === 'CREATED' || order.status === 'PAID') ? 'bg-amber/20 text-amber' : 
                                                 order.status === 'confirmed' ? 'bg-green-deep text-amber border border-amber/10 shadow-sm' : 
                                                 order.status === 'delivered' ? 'bg-green-fresh text-white shadow-md' : 
                                                 order.status === 'declined' ? 'bg-red-500/20 text-red-600' :
+                                                order.status === 'SHIPPED' ? 'bg-blue-100 text-blue-600' :
                                                 'bg-green-fresh/20 text-green-fresh'
                                             }`}>
-                                                {order.status === 'pending' ? 'New Request' : 
+                                                {(order.status === 'pending' || order.status === 'CREATED') ? 'New Request' : 
+                                                 order.status === 'PAID' ? 'Payment Held (Escrow)' :
                                                  order.status === 'delivered' ? 'Delivered Successful' : 
                                                  order.status === 'declined' ? 'Request Rejected' :
                                                  order.status}
@@ -614,7 +622,7 @@ const FarmerDashboard = () => {
                                     </td>
                                     <td className="p-6">
                                         <div className="flex gap-2">
-                                            {order.status === 'pending' && (
+                                            {(order.status === 'pending' || order.status === 'CREATED' || order.status === 'PAID') && (
                                                 <>
                                                     <button 
                                                         onClick={() => handleUpdateOrderStatus(order.id, 'confirmed')} 
@@ -881,6 +889,77 @@ const FarmerDashboard = () => {
                 </div>
             </div>
         );
+      case 'Payment Track':
+        return (
+          <div className="space-y-6">
+            <div className="bg-white p-6 rounded-3xl shadow-sm border border-cream-dark">
+                <h2 className="font-playfair text-2xl font-black text-green-deep">Income Tracker 💸</h2>
+                <p className="text-gray-400 text-sm font-bold">Track your payments being held in the secure Agro-Vault.</p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-6">
+                {orders.filter(o => o.status === 'PAID' || o.status === 'COMPLETED' || o.status === 'SHIPPED').length === 0 ? (
+                    <div className="py-20 text-center bg-white rounded-3xl border border-cream-dark text-gray-400 font-bold italic">
+                        No secured payments to track yet. Sell more crops! 🌾
+                    </div>
+                ) : (
+                    orders.filter(o => o.status === 'PAID' || o.status === 'COMPLETED' || o.status === 'SHIPPED').map(order => (
+                        <div key={order.id} className="bg-white p-8 rounded-[32px] shadow-sm border border-cream-dark hover:border-green-fresh transition-all group">
+                            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-10">
+                                <div className="flex items-center gap-6">
+                                    <div className="w-16 h-16 bg-cream rounded-2xl flex items-center justify-center text-3xl shadow-inner">📦</div>
+                                    <div>
+                                        <h4 className="text-lg font-black text-green-deep">{order.product?.name}</h4>
+                                        <p className="text-[10px] text-gray-400 font-black uppercase">Buyer: {order.buyer?.first_name} · <span className="text-green-fresh">₹{order.total_price}</span></p>
+                                    </div>
+                                </div>
+
+                                {/* Flow Tracker */}
+                                <div className="flex-1 max-w-lg mx-auto">
+                                    <div className="relative flex justify-between items-center px-4">
+                                        <div className="absolute top-1/2 left-0 w-full h-[2px] bg-cream-dark -translate-y-1/2" />
+                                        <div 
+                                            className="absolute top-1/2 left-0 h-[2px] bg-amber -translate-y-1/2 transition-all duration-1000"
+                                            style={{ width: (order.status === 'COMPLETED' || order.status === 'delivered') ? '100%' : '50%' }}
+                                        />
+
+                                        <div className="relative z-10 flex flex-col items-center">
+                                            <div className="w-8 h-8 rounded-full bg-green-fresh text-white flex items-center justify-center text-xs shadow-lg">✅</div>
+                                            <p className="text-[9px] font-black uppercase mt-2 text-green-fresh">Buyer Paid</p>
+                                        </div>
+
+                                        <div className="relative z-10 flex flex-col items-center">
+                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg transition-all ${(order.status === 'COMPLETED' || order.status === 'delivered') ? 'bg-green-fresh shadow-lg' : 'bg-amber text-white shadow-[0_0_20px_rgba(245,158,11,0.4)]'}`}>
+                                                {(order.status === 'COMPLETED' || order.status === 'delivered') ? '✅' : '🛡️'}
+                                            </div>
+                                            <p className={`text-[9px] font-black uppercase mt-2 ${(order.status === 'COMPLETED' || order.status === 'delivered') ? 'text-green-fresh' : 'text-amber animate-pulse'}`}>
+                                                {(order.status === 'COMPLETED' || order.status === 'delivered') ? 'Escrow Released' : 'Held in Vault'}
+                                            </p>
+                                        </div>
+
+                                        <div className="relative z-10 flex flex-col items-center">
+                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs transition-all ${(order.status === 'COMPLETED' || order.status === 'delivered') ? 'bg-green-fresh text-white shadow-lg' : 'bg-cream-dark text-gray-300'}`}>💰</div>
+                                            <p className={`text-[9px] font-black uppercase mt-2 ${(order.status === 'COMPLETED' || order.status === 'delivered') ? 'text-green-fresh' : 'text-gray-300'}`}>Arrived in Bank</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="bg-cream/30 p-6 rounded-[24px] text-center lg:text-right min-w-[220px]">
+                                    <p className="text-[10px] font-black text-gray-400 uppercase mb-1 tracking-tighter">Current Money Status</p>
+                                    <p className={`text-md font-black uppercase ${(order.status === 'COMPLETED' || order.status === 'delivered') ? 'text-green-fresh' : 'text-amber'}`}>
+                                        {(order.status === 'COMPLETED' || order.status === 'delivered') ? '💸 PAID TO YOU' : '🔒 SECURELY HELD'}
+                                    </p>
+                                    {order.status !== 'COMPLETED' && order.status !== 'delivered' && (
+                                        <p className="text-[9px] text-gray-400 italic mt-2">Will be released once buyer confirms delivery.</p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
+          </div>
+        );
       default:
         return <div>Tab under development</div>;
     }
@@ -961,6 +1040,36 @@ const FarmerDashboard = () => {
                       <div className="md:col-span-2"><label className="text-xs font-bold uppercase text-gray-400">Crop Name</label><input required className="w-full bg-cream rounded-xl p-4 mt-1 border" placeholder="Wheat..." value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} /></div>
                       <div><label className="text-xs font-bold uppercase text-gray-400">Quantity</label><input required type="number" className="w-full bg-cream rounded-xl p-4 mt-1" value={formData.quantity} onChange={e => setFormData({...formData, quantity: e.target.value})} /></div>
                       <div><label className="text-xs font-bold uppercase text-gray-400">Unit</label><select className="w-full bg-cream rounded-xl p-4 mt-1 font-bold" value={formData.unit} onChange={e => setFormData({...formData, unit: e.target.value})}><option>kg</option><option>quintal</option></select></div>
+                      <div className="md:col-span-2">
+                        <label className="text-xs font-bold uppercase text-gray-400 font-black tracking-widest">Crop Category</label>
+                        <div className="relative group">
+                          <input 
+                              required 
+                              list="category-suggestions"
+                              className="w-full bg-cream rounded-xl p-4 mt-2 border-2 border-transparent focus:border-green-fresh outline-none font-bold text-sm transition-all"
+                              placeholder="🌾 Select or type a category (e.g., Basmati Rice, Organic Kale...)"
+                              value={formData.category} 
+                              onChange={e => setFormData({...formData, category: e.target.value})}
+                          />
+                          <datalist id="category-suggestions">
+                              <option value="Rice">🌾 Rice</option>
+                              <option value="Vegetables">🥦 Vegetables</option>
+                              <option value="Fruits">🍎 Fruits</option>
+                              <option value="Grains">🌽 Grains</option>
+                              <option value="Pulses">🥣 Pulses</option>
+                              <option value="Spices">🌶 Spices</option>
+                              <option value="Dairy">🥛 Dairy</option>
+                              <option value="Poultry">🍗 Poultry</option>
+                              <option value="Organic">🌿 Organic Items</option>
+                              <option value="Seeds">🌱 Seeds</option>
+                              <option value="Fertilizers">💩 Fertilizers</option>
+                              <option value="Others">📦 Others</option>
+                          </datalist>
+                          <div className="absolute right-4 top-[60%] -translate-y-1/2 opacity-20 group-focus-within:opacity-100 transition-opacity">
+                              ⌨
+                          </div>
+                        </div>
+                      </div>
                       <div className="md:col-span-2"><label className="text-xs font-bold uppercase text-gray-400">Selling Price</label><input required type="number" className="w-full bg-cream rounded-xl p-4 mt-1 border-2 border-green-fresh" placeholder="₹" value={formData.user_price} onChange={e => setFormData({...formData, user_price: e.target.value})} /></div>
                       <div className="md:col-span-2"><label className="text-xs font-bold uppercase text-gray-400">Harvest Address</label><textarea required className="w-full bg-cream rounded-xl p-4 mt-1 border min-h-[80px]" placeholder="Specific field location, village, or warehouse address..." value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} /></div>
                       <div className="md:col-span-2 grid grid-cols-2 gap-4">
@@ -1101,6 +1210,27 @@ const FarmerDashboard = () => {
                         </button>
                       </div>
                   </div>
+              </div>
+          </div>
+      )}
+      {/* 🚀 New Payment Escrow Notification */}
+      {escrowNotification.show && (
+          <div className="fixed top-24 right-10 z-[300] max-w-sm w-full bg-white rounded-[32px] p-6 shadow-[0_20px_50px_rgba(0,0,0,0.15)] border-l-8 border-green-fresh animate-in slide-in-from-right-10 duration-500">
+              <div className="flex gap-4">
+                  <div className="w-14 h-14 bg-green-fresh/10 text-green-fresh text-3xl flex items-center justify-center rounded-2xl shrink-0">💰</div>
+                  <div>
+                      <h4 className="text-md font-black text-green-deep mb-1">Buyer has Paid! ✨</h4>
+                      <p className="text-xs text-gray-500 font-bold leading-relaxed">
+                          A payment of <span className="text-green-fresh">₹{escrowNotification.amount}</span> for Order #{escrowNotification.orderId.slice(0,6)} is now **Held in Escrow**.
+                      </p>
+                      <button 
+                         onClick={() => { setActiveTab('Payment Track'); setEscrowNotification({ show: false, orderId: null, amount: 0 }); }}
+                         className="mt-4 text-[10px] font-black text-green-fresh uppercase tracking-widest hover:underline"
+                      >
+                         Track Money Safety →
+                      </button>
+                  </div>
+                  <button onClick={() => setEscrowNotification({ show: false, orderId: null, amount: 0 })} className="text-gray-300 hover:text-red-400 text-xl font-bold">×</button>
               </div>
           </div>
       )}

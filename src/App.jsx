@@ -13,6 +13,8 @@ import RewardPoints from './pages/RewardPoints';
 import CommunityDeals from './pages/CommunityDeals';
 import UserProfile from './pages/UserProfile';
 import GroupBuying from './pages/GroupBuying';
+import Checkout from './pages/Checkout';
+import EscrowTest from './pages/EscrowTest';
 import { AuthProvider } from './context/AuthContext';
 
 function App() {
@@ -34,6 +36,8 @@ function App() {
             <Route path="/community-deals" element={<CommunityDeals />} />
             <Route path="/user-profile" element={<UserProfile />} />
             <Route path="/group-buying" element={<GroupBuying />} />
+            <Route path="/checkout" element={<Checkout />} />
+            <Route path="/escrow-test" element={<EscrowTest />} />
             {/* Keeping /dashboard as a temporary redirect or landing page can be added later if needed */}
             <Route path="/dashboard" element={<FarmerDashboard />} />
           </Routes>

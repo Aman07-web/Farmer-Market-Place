@@ -41,6 +41,10 @@ const BuyerDashboard = () => {
   const [suggestions, setSuggestions] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
 
+  // Custom Modal State
+  const [confirmModal, setConfirmModal] = useState({ show: false, orderId: null });
+  const [statusMessage, setStatusMessage] = useState({ show: false, type: 'success', text: '' });
+
   const reverseGeocode = (lat, lng) => {
     const fallbackGeocode = async (lat, lng) => {
         try {
@@ -159,7 +163,7 @@ const BuyerDashboard = () => {
     return R * c; 
   };
 
-  const tabs = ['Dashboard', 'Marketplace', 'My Orders', 'Address', 'Settings'];
+  const tabs = ['Dashboard', 'Marketplace', 'My Orders', 'Payment Track', 'Address', 'Settings'];
 
   useEffect(() => {
     if (!user && !loading) {
@@ -350,7 +354,7 @@ const BuyerDashboard = () => {
     setShowOrderModal(true);
   };
 
-  const confirmOrder = async () => {
+  const handlePlaceOrder = async () => {
     if (!deliveryAddress) {
         alert("Please provide a delivery address.");
         return;
@@ -402,10 +406,24 @@ const BuyerDashboard = () => {
 
   const handleConfirmDelivery = async (id) => {
     try {
-        const { error } = await supabase.from('orders').update({ status: 'delivered' }).eq('id', id);
-        if (error) throw error;
-        fetchMyOrders();
-    } catch (err) { alert(err.message); }
+        const res = await fetch('http://localhost:5000/api/escrow/confirm-delivery', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ order_id: id })
+        });
+        const data = await res.json();
+        if(data.success) {
+            setConfirmModal({ show: false, orderId: null });
+            setStatusMessage({ show: true, type: 'success', text: 'Success! Payment Released to Farmer. 🌾✅' });
+            fetchMyOrders();
+            setTimeout(() => setStatusMessage({ show: false, type: 'success', text: '' }), 4000);
+        } else {
+            throw new Error(data.error || "Update failed");
+        }
+    } catch (err) { 
+        setStatusMessage({ show: true, type: 'error', text: "Error: " + err.message });
+        setTimeout(() => setStatusMessage({ show: false, type: 'error', text: '' }), 4000);
+    }
   };
 
   const filteredProducts = products.filter(p => {
@@ -598,8 +616,8 @@ const BuyerDashboard = () => {
                                 <div className="absolute top-4 right-4 bg-white/90 backdrop-blur px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider text-green-deep">
                                     {p.category}
                                 </div>
-                                <div className="absolute bottom-4 left-4 bg-green-deep/80 backdrop-blur px-2 py-1 rounded-lg text-[10px] font-bold text-white uppercase flex items-center gap-1">
-                                    <span>🚜</span> {p.farmer?.first_name || 'Field Farmer'}
+                                <div className="absolute bottom-3 left-3 bg-green-deep/90 backdrop-blur-md px-3 py-1.5 rounded-xl text-[9px] font-black text-white uppercase flex items-center gap-2 shadow-lg border border-white/10">
+                                    <span className="text-[12px]">👨‍🌾</span> {p.farmer?.first_name ? `${p.farmer.first_name} ${p.farmer.last_name || ''}` : `ID: ${p.farmer_id?.substring(0, 8)}...`}
                                 </div>
                             </div>
                             <div className="p-5">
@@ -711,22 +729,45 @@ const BuyerDashboard = () => {
                                         <td className="p-6">
                                             <div className="flex flex-col items-start gap-1 min-w-[100px]">
                                                 <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase ${
-                                                    order.status === 'pending' ? 'bg-amber/20 text-amber' : 
-                                                    order.status === 'confirmed' ? 'bg-green-deep text-amber border border-amber/10 shadow-sm' : 
-                                                    order.status === 'delivered' ? 'bg-green-fresh text-white' : 
-                                                    order.status === 'declined' ? 'bg-red-500/20 text-red-600' :
+                                                    order.status === 'pending' ? 'bg-amber/20 text-amber animate-pulse' : 
+                                                    order.status === 'confirmed' ? 'bg-amber text-white shadow-lg' : 
+                                                    order.status === 'delivered' || order.status === 'COMPLETED' ? 'bg-green-deep text-white border border-green-fresh/30 shadow-lg' : 
+                                                    order.status === 'declined' ? 'bg-red-500 text-white' :
                                                     'bg-green-fresh/20 text-green-fresh'
                                                 }`}>
-                                                    {order.status === 'pending' ? 'Farmer Reviewing' : 
-                                                     order.status === 'declined' ? 'Rejected' : 
+                                                    {order.status === 'pending' ? '⏳ Waiting Farmer Approval' : 
+                                                     order.status === 'confirmed' ? '✅ Approved - Ready to Pay' :
+                                                     order.status === 'declined' ? '❌ Product Declined by Farmer' :
                                                      order.status}
                                                 </span>
                                             </div>
                                         </td>
                                         <td className="p-6 text-right">
-                                            {order.status !== 'delivered' && (
+                                            {order.status === 'confirmed' && (
                                                 <button 
-                                                    onClick={() => handleConfirmDelivery(order.id)}
+                                                   onClick={() => {
+                                                        const orderParams = new URLSearchParams({
+                                                            orderId: order.id,
+                                                            productId: order.product?.id || '',
+                                                            buyerId: user.id,
+                                                            sellerId: order.farmer_id || '',
+                                                            amount: order.total_price,
+                                                            productName: order.product?.name || 'Product',
+                                                            quantity: order.quantity,
+                                                            unit: order.unit_at_order || 'kg',
+                                                            deliveryAddress: order.delivery_address || '',
+                                                            buyerPhone: order.buyer_phone || ''
+                                                        });
+                                                        window.location.href = `/escrow-test?${orderParams.toString()}`;
+                                                   }}
+                                                   className="bg-green-fresh text-white text-[10px] font-black uppercase px-6 py-3 rounded-2xl shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center gap-2 mx-auto lg:ml-auto"
+                                                >
+                                                    💳 Pay Securely ₹{order.total_price} →
+                                                </button>
+                                            )}
+                                            {(order.status === 'PAID' || order.status === 'delivered' || order.status === 'SHIPPED') && (
+                                                <button 
+                                                    onClick={() => setConfirmModal({ show: true, orderId: order.id })}
                                                     className="bg-green-deep text-white text-[9px] font-black uppercase px-4 py-2 rounded-xl shadow-lg hover:scale-105 active:scale-95 transition-all"
                                                 >
                                                     Confirm Received ✅
@@ -746,6 +787,86 @@ const BuyerDashboard = () => {
                     {filteredOrders.length === 0 && <div className="p-20 text-center text-gray-400 italic font-bold">No orders found in this category. 🌿</div>}
                 </div>
             </div>
+        );
+      case 'Payment Track':
+        return (
+          <div className="space-y-6">
+            <div className="bg-white p-6 rounded-3xl shadow-sm border border-cream-dark">
+              <h2 className="font-playfair text-2xl font-black text-green-deep mb-2">Escrow Payment Tracker 🛡️</h2>
+              <p className="text-gray-400 text-sm font-bold">Monitor where your money is held in real-time.</p>
+            </div>
+            
+            <div className="grid grid-cols-1 gap-6">
+              {orders.filter(o => o.status !== 'cancelled' && o.status !== 'pending').length === 0 ? (
+                <div className="py-20 text-center bg-white rounded-3xl border border-cream-dark text-gray-400 font-bold italic">
+                  No active secured payments to track. 🌿
+                </div>
+              ) : (
+                orders.filter(o => o.status !== 'cancelled' && o.status !== 'pending' && o.status !== 'declined').map(order => (
+                  <div key={order.id} className="bg-white p-8 rounded-[32px] shadow-sm border border-cream-dark group hover:border-amber transition-all">
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                      <div className="flex items-center gap-5">
+                        <div className="w-16 h-16 bg-cream rounded-2xl p-1 overflow-hidden shrink-0 border border-cream-dark">
+                          <img src={order.product?.image_url_1} className="w-full h-full object-cover" />
+                        </div>
+                        <div>
+                          <h4 className="text-lg font-black text-green-deep">{order.product?.name}</h4>
+                          <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Order Amount: ₹{order.total_price}</p>
+                        </div>
+                      </div>
+
+                      {/* Tracker Visual */}
+                      <div className="flex-1 max-w-lg">
+                        <div className="relative flex justify-between items-center px-4">
+                          {/* Line */}
+                          <div className="absolute top-1/2 left-0 w-full h-[2px] bg-cream-dark -translate-y-1/2" />
+                          <div 
+                            className="absolute top-1/2 left-0 h-[3px] bg-green-fresh -translate-y-1/2 transition-all duration-1000"
+                            style={{ width: (order.status === 'delivered' || order.status === 'COMPLETED') ? '100%' : '50%' }}
+                          />
+                          
+                          {/* Steps */}
+                          <div className="relative z-10 flex flex-col items-center">
+                            <div className="w-8 h-8 rounded-full bg-green-fresh text-white flex items-center justify-center text-xs shadow-lg ring-4 ring-green-fresh/10">💰</div>
+                            <p className="text-[10px] font-black text-green-fresh uppercase mt-2">Paid</p>
+                          </div>
+                          
+                          <div className="relative z-10 flex flex-col items-center">
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg transition-all ${(order.status !== 'delivered' && order.status !== 'COMPLETED') ? 'bg-amber text-white shadow-[0_0_20px_rgba(245,158,11,0.3)]' : 'bg-green-fresh text-white'}`}>
+                              {(order.status !== 'delivered' && order.status !== 'COMPLETED') ? '🛡️' : '✅'}
+                            </div>
+                            <p className={`text-[10px] font-black uppercase mt-2 ${(order.status !== 'delivered' && order.status !== 'COMPLETED') ? 'text-amber animate-pulse' : 'text-green-fresh'}`}>
+                              {(order.status !== 'delivered' && order.status !== 'COMPLETED') ? 'Held in Escrow' : 'Released'}
+                            </p>
+                          </div>
+                          
+                          <div className="relative z-10 flex flex-col items-center">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs transition-all ${(order.status === 'delivered' || order.status === 'COMPLETED') ? 'bg-green-fresh text-white shadow-lg ring-4 ring-green-fresh/10' : 'bg-cream-dark text-gray-400'}`}>👨‍🌾</div>
+                            <p className={`text-[10px] font-black uppercase mt-2 ${(order.status === 'delivered' || order.status === 'COMPLETED') ? 'text-green-fresh' : 'text-gray-400'}`}>Farmer Paid</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-cream/20 p-5 rounded-2xl border border-cream-dark/50 text-center lg:text-right min-w-[200px]">
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-tighter mb-1">Current Fund Location</p>
+                        <p className={`text-sm font-black uppercase ${(order.status !== 'delivered' && order.status !== 'COMPLETED') ? 'text-amber' : 'text-green-fresh'}`}>
+                          {(order.status !== 'delivered' && order.status !== 'COMPLETED') ? '🔒 Locked in Agro-Vault' : '💸 Disbursed to Farmer'}
+                        </p>
+                        {(order.status !== 'delivered' && order.status !== 'COMPLETED') && (
+                          <button 
+                            onClick={() => setConfirmModal({ show: true, orderId: order.id })}
+                            className="mt-3 w-full bg-green-deep text-white text-[9px] font-black py-2.5 rounded-xl uppercase hover:bg-green-fresh transition-all shadow-md"
+                          >
+                            I Received Product →
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         );
       case 'Settings':
         return (
@@ -1062,7 +1183,7 @@ const BuyerDashboard = () => {
                                       onClick={() => setOrderStep(2)}
                                       className="bg-green-deep text-white px-10 py-5 rounded-[24px] font-black text-xs shadow-xl hover:scale-105 active:scale-95 transition-all uppercase tracking-widest"
                                   >
-                                      Secure Payment →
+                                      Send Order Request →
                                   </button>
                               </div>
                           </div>
@@ -1070,27 +1191,18 @@ const BuyerDashboard = () => {
                           <div className="space-y-8 animate-in slide-in-from-right-4 duration-300">
                               <div className="text-center">
                                   <div className="w-16 h-16 bg-green-fresh/10 text-green-fresh rounded-full flex items-center justify-center mx-auto mb-4 text-3xl animate-bounce">🛡️</div>
-                                  <h3 className="text-xl font-black text-green-deep uppercase tracking-tight">Choose Security</h3>
-                                  <p className="text-xs text-gray-400 font-bold mt-1">Your transaction is encrypted and safe.</p>
-                              </div>
+                                  <h3 className="text-xl font-black text-green-deep uppercase tracking-tight">Confirm Details</h3>
+                                  <div className="bg-amber/10 p-5 rounded-3xl border border-amber/20 mt-6 text-left">
+                                      <p className="text-[10px] font-black text-amber uppercase mb-2">🚚 Delivery to:</p>
+                                      <p className="text-xs font-bold text-green-deep">{deliveryAddress}</p>
+                                      <p className="text-[10px] font-black text-gray-400 mt-3 uppercase">Phone: {phoneNumber}</p>
+                                  </div>
 
-                              <div className="grid grid-cols-1 gap-4">
-                                  <label className="relative flex items-center gap-4 p-5 bg-cream/30 border-2 border-green-fresh/20 rounded-3xl cursor-pointer hover:border-green-fresh transition-all group">
-                                      <input type="radio" name="pay" defaultChecked className="accent-green-fresh w-5 h-5" />
-                                      <div className="flex-1">
-                                          <p className="text-sm font-black text-green-deep uppercase">Pay with Online Pay</p>
-                                          <p className="text-[10px] font-bold text-gray-400">10% Guaranteed Cashback on First 5 Orders</p>
-                                      </div>
-                                      <span className="text-2xl opacity-40 group-hover:opacity-100 transition-opacity">💳</span>
-                                  </label>
-                                  <label className="relative flex items-center gap-4 p-5 bg-cream/30 border-2 border-transparent border-dashed rounded-3xl cursor-pointer hover:border-amber transition-all group">
-                                      <input type="radio" name="pay" className="accent-amber w-5 h-5" />
-                                      <div className="flex-1">
-                                          <p className="text-sm font-black text-green-deep uppercase">Pay on Delivery (COD)</p>
-                                          <p className="text-[10px] font-bold text-gray-400">Available in your current location radius</p>
-                                      </div>
-                                      <span className="text-2xl opacity-40 group-hover:opacity-100 transition-opacity">🤝</span>
-                                  </label>
+                                  <div className="bg-cream/30 p-5 rounded-3xl border border-dashed border-gray-200 mt-4">
+                                      <p className="text-[10px] font-bold text-gray-400 italic leading-relaxed">
+                                          "By sending this request, the farmer will be notified to set aside your stock. Once approved, you can complete the secure escrow payment."
+                                      </p>
+                                  </div>
                               </div>
 
                               <div className="flex gap-4">
@@ -1102,10 +1214,10 @@ const BuyerDashboard = () => {
                                   </button>
                                   <button 
                                       disabled={isOrdering}
-                                      onClick={confirmOrder}
+                                      onClick={handlePlaceOrder}
                                       className="flex-[2] bg-green-deep text-white py-5 rounded-[28px] font-black text-xs shadow-2xl hover:scale-105 active:scale-95 transition-all uppercase tracking-widest disabled:opacity-50"
                                   >
-                                      {isOrdering ? 'Securing Harvest...' : 'Confirm Order & Pay'}
+                                      {isOrdering ? '📡 Sending Request...' : 'Send Secure Request →'}
                                   </button>
                               </div>
                               
@@ -1114,16 +1226,13 @@ const BuyerDashboard = () => {
                               </p>
                           </div>
                       ) : (
-                          <div className="py-12 text-center animate-in zoom-in-50 duration-500">
-                              <div className="w-24 h-24 bg-green-fresh text-white rounded-full flex items-center justify-center mx-auto mb-8 text-5xl shadow-2xl ring-8 ring-green-fresh/10">✨</div>
-                              <h3 className="text-3xl font-playfair font-black text-green-deep uppercase tracking-tight mb-4">Harvest Secured!</h3>
-                              <p className="text-sm text-gray-400 font-bold mb-8 px-10 leading-relaxed capitalize">
-                                  Farmer {selectedProduct.farmer?.first_name} is preparing your fresh crops. redirecting to tracking dashboard...
-                              </p>
-                              <div className="flex justify-center gap-2">
-                                  <div className="w-2 h-2 bg-amber rounded-full animate-bounce delay-75"></div>
-                                  <div className="w-2 h-2 bg-amber rounded-full animate-bounce delay-150"></div>
-                                  <div className="w-2 h-2 bg-amber rounded-full animate-bounce delay-300"></div>
+                          <div className="py-12 text-center animate-in zoom-in-95 duration-500">
+                              <div className="w-24 h-24 bg-green-fresh text-white rounded-full flex items-center justify-center mx-auto mb-8 text-5xl shadow-[0_0_40px_rgba(16,185,129,0.3)]">✨</div>
+                              <h3 className="text-2xl font-black text-green-deep uppercase tracking-tight">Request Sent!</h3>
+                              <p className="text-gray-400 font-bold mt-2">Farmer will review and approve your order shortly.<br/>Check 'My Orders' for the payment link once approved. 📑</p>
+                              
+                              <div className="mt-10 flex justify-center gap-2">
+                                  {[1,2,3].map(i => <div key={i} className="w-2 h-2 bg-green-fresh rounded-full animate-bounce" style={{ animationDelay: `${i * 0.1}s` }} />)}
                               </div>
                           </div>
                       )}
@@ -1232,6 +1341,42 @@ const BuyerDashboard = () => {
           </div>
       </div>
   )}
+
+      {/* 🛡️ Premium Custom Confirmation Modal */}
+      {confirmModal.show && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+              <div className="absolute inset-0 bg-green-deep/80 backdrop-blur-md" onClick={() => setConfirmModal({ show: false, orderId: null })} />
+              <div className="relative bg-white w-full max-w-sm rounded-[40px] p-8 shadow-2xl text-center border-b-8 border-amber animate-in zoom-in-95 duration-300">
+                  <div className="w-20 h-20 bg-amber/10 text-amber text-4xl flex items-center justify-center rounded-3xl mx-auto mb-6">📦</div>
+                  <h3 className="text-xl font-black text-green-deep uppercase tracking-tight mb-2">Confirm Receipt?</h3>
+                  <p className="text-xs text-gray-500 font-bold mb-8 leading-relaxed">
+                      Is your product delivered? Once confirmed, your held payment will be <span className="text-green-fresh">released to the farmer</span> immediately.
+                  </p>
+                  <div className="flex gap-3">
+                      <button 
+                          onClick={() => setConfirmModal({ show: false, orderId: null })}
+                          className="flex-1 py-4 rounded-2xl font-black text-[10px] uppercase border-2 border-cream-dark text-gray-400 hover:bg-cream transition-all"
+                      >
+                          Wait
+                      </button>
+                      <button 
+                          onClick={() => handleConfirmDelivery(confirmModal.orderId)}
+                          className="flex-2 bg-green-deep text-white px-8 py-4 rounded-2xl font-black text-[10px] uppercase shadow-lg shadow-green-deep/20 hover:scale-105 active:scale-95 transition-all"
+                      >
+                          Yes, Release Now →
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* ✨ Floating Status Toast */}
+      {statusMessage.show && (
+          <div className={`fixed bottom-10 left-1/2 -translate-x-1/2 z-[300] px-8 py-4 rounded-2xl shadow-2xl text-xs font-black uppercase tracking-widest flex items-center gap-3 animate-in slide-in-from-bottom-10 duration-500 ${statusMessage.type === 'success' ? 'bg-green-fresh text-white' : 'bg-red-500 text-white'}`}>
+              <span>{statusMessage.type === 'success' ? '✅' : '❌'}</span>
+              {statusMessage.text}
+          </div>
+      )}
     </div>
   );
 };
