@@ -25,6 +25,9 @@ const FarmerDashboard = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [processingOrders, setProcessingOrders] = useState({});
   const [escrowNotification, setEscrowNotification] = useState({ show: false, orderId: null, amount: 0 });
+  const [showListingSuccess, setShowListingSuccess] = useState(false);
+  const [listingSuccessMsg, setListingSuccessMsg] = useState("");
+  const [lightbox, setLightbox] = useState({ show: false, images: [], index: 0, productName: '' });
   
   // Form State
   const [formData, setFormData] = useState({
@@ -353,11 +356,13 @@ const FarmerDashboard = () => {
         if (editingProduct) {
             const { error } = await supabase.from('products').update(productData).eq('id', editingProduct.id);
             if (error) throw error;
-            alert("Product updated!");
+            setListingSuccessMsg("Crop Updated Successfully! 🚜✨");
+            setShowListingSuccess(true);
         } else {
             const { error } = await supabase.from('products').insert([productData]);
             if (error) throw error;
-            alert("Product listed!");
+            setListingSuccessMsg("Your harvest is LIVE in the marketplace! 🌾✨");
+            setShowListingSuccess(true);
         }
         
         setShowAddModal(false);
@@ -412,10 +417,12 @@ const FarmerDashboard = () => {
         setProducts(prev => prev.filter(p => p.id !== productToDelete.id));
         setShowDeleteModal(false);
         setProductToDelete(null);
-        alert("Crop permanently removed from market! 🚜✨");
+        setListingSuccessMsg("Crop permanently removed from market! 🚜💨");
+        setShowListingSuccess(true);
     } catch (err) {
         console.error("Delete failed:", err);
-        alert("🚜 Deletion Failed: " + err.message);
+        setListingSuccessMsg("🚜 Error: " + err.message);
+        setShowListingSuccess(true);
     } finally {
         setIsDeleting(false);
     }
@@ -521,12 +528,21 @@ const FarmerDashboard = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {products.map(p => (
                         <div key={p.id} className="bg-white rounded-2xl overflow-hidden shadow-sm border border-cream-dark hover:shadow-xl transition-all group">
-                            <div className="h-48 bg-cream overflow-hidden relative">
-                                <img src={p.image_url_1} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt={p.name} />
-                                <div className="absolute top-4 right-4 bg-green-deep/90 backdrop-blur px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider text-white">
-                                    {p.category}
-                                 </div>
-                            </div>
+                             <div className="h-56 bg-cream overflow-hidden relative group/img cursor-zoom-in" onClick={() => setLightbox({ show: true, images: [p.image_url_1, p.image_url_2].filter(Boolean), index: 0, productName: p.name })}>
+                                 <img src={p.image_url_1} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt={p.name} />
+                                 {p.image_url_2 && (
+                                     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 bg-black/20 backdrop-blur-md px-3 py-1.5 rounded-full ring-1 ring-white/20">
+                                         <div className="w-1.5 h-1.5 rounded-full bg-white shadow-sm"></div>
+                                         <div className="w-1.5 h-1.5 rounded-full bg-white/40 shadow-sm"></div>
+                                     </div>
+                                 )}
+                                 <div className="absolute top-4 right-4 bg-green-deep/90 backdrop-blur px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider text-white shadow-lg ring-1 ring-white/20">
+                                     {p.category}
+                                  </div>
+                                  <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-black uppercase tracking-[0.2em] backdrop-grayscale-[0.5]">
+                                      View Photos 🔍
+                                  </div>
+                             </div>
                             <div className="p-5 text-left">
                                 <h3 className="font-bold text-green-deep text-lg mb-1">{p.name}</h3>
                                 <div className="flex justify-between items-baseline">
@@ -1231,6 +1247,75 @@ const FarmerDashboard = () => {
                       </button>
                   </div>
                   <button onClick={() => setEscrowNotification({ show: false, orderId: null, amount: 0 })} className="text-gray-300 hover:text-red-400 text-xl font-bold">×</button>
+              </div>
+          </div>
+      )}
+      {/* 🚜 Farmer Success Notification */}
+      {showListingSuccess && (
+          <div className="fixed inset-0 z-[500] flex items-center justify-center p-4 bg-green-deep/20 backdrop-blur-md animate-in fade-in duration-300">
+              <div className="bg-white max-w-sm w-full rounded-[40px] p-8 shadow-[0_40px_100px_rgba(0,0,0,0.2)] border-b-8 border-amber transform animate-in zoom-in-95 duration-500">
+                  <div className="text-center">
+                      <div className="w-24 h-24 bg-cream rounded-full flex items-center justify-center mx-auto mb-6 text-5xl shadow-inner animate-bounce text-slate-800">🚜</div>
+                      <h3 className="text-2xl font-black text-green-deep uppercase tracking-tighter mb-2">Farmer Alert!</h3>
+                      <p className="text-gray-500 font-bold text-sm leading-relaxed mb-8">{listingSuccessMsg}</p>
+                      
+                      <button 
+                          onClick={() => setShowListingSuccess(false)}
+                          className="w-full bg-green-deep text-white py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl hover:scale-105 active:scale-95 transition-all"
+                      >
+                          Great! ✅
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+      {/* 🖼️ Full Screen Lightbox */}
+      {lightbox.show && (
+          <div className="fixed inset-0 z-[600] bg-black/95 backdrop-blur-2xl flex flex-col items-center justify-center p-4 lg:p-10 animate-in fade-in duration-300">
+              <button 
+                  onClick={() => setLightbox(prev => ({ ...prev, show: false }))}
+                  className="absolute top-8 right-8 text-white/40 hover:text-white text-4xl font-light transition-all hover:rotate-90 z-[610]"
+              >
+                  ×
+              </button>
+
+              <div className="w-full max-w-5xl aspect-video relative flex items-center justify-center group/light">
+                  <img 
+                      src={lightbox.images[lightbox.index]} 
+                      className="max-w-full max-h-[80vh] object-contain rounded-3xl shadow-[0_0_100px_rgba(255,255,255,0.1)] transition-all duration-500 animate-in zoom-in-95" 
+                      alt={lightbox.productName}
+                  />
+
+                  {lightbox.images.length > 1 && (
+                      <>
+                          <button 
+                              onClick={(e) => { e.stopPropagation(); setLightbox(prev => ({ ...prev, index: (prev.index - 1 + prev.images.length) % prev.images.length })) }}
+                              className="absolute left-4 lg:-left-12 p-4 text-white/30 hover:text-white transition-all text-4xl"
+                          >
+                              ‹
+                          </button>
+                          <button 
+                              onClick={(e) => { e.stopPropagation(); setLightbox(prev => ({ ...prev, index: (prev.index + 1) % prev.images.length })) }}
+                              className="absolute right-4 lg:-right-12 p-4 text-white/30 hover:text-white transition-all text-4xl"
+                          >
+                              ›
+                          </button>
+
+                          <div className="absolute -bottom-12 flex gap-3">
+                              {lightbox.images.map((_, i) => (
+                                  <div 
+                                      key={i} 
+                                      className={`h-1.5 transition-all duration-300 rounded-full ${i === lightbox.index ? 'w-12 bg-amber shadow-[0_0_15px_rgba(245,158,11,0.5)]' : 'w-4 bg-white/20'}`}
+                                  ></div>
+                              ))}
+                          </div>
+                      </>
+                  )}
+              </div>
+
+              <div className="absolute top-8 left-1/2 -translate-x-1/2 text-center pointer-events-none">
+                  <h4 className="text-white font-black uppercase tracking-[0.4em] text-xs mb-1 opacity-50">Harvest Inspection</h4>
+                  <p className="text-amber font-black text-2xl uppercase tracking-tighter">{lightbox.productName}</p>
               </div>
           </div>
       )}

@@ -552,20 +552,20 @@ const BuyerDashboard = () => {
                         {products.slice(0, 4).map(p => (
                             <div key={p.id} className="flex items-center justify-between p-4 bg-green-fresh/5 rounded-2xl border border-green-fresh/10">
                                 <div className="flex items-center gap-4">
-                                    <img src={p.image_url_1} className="w-10 h-10 rounded-xl object-cover" />
+                                    <img src={p.image_url_1} className="w-12 h-12 rounded-xl object-cover border border-green-fresh/10" />
                                     <div>
                                         <p className="text-sm font-bold text-green-deep">{p.name}</p>
-                                        <p className="text-[10px] text-green-mid uppercase font-black">Just listed by farmer</p>
+                                        <p className="text-[9px] text-green-mid uppercase font-black tracking-widest leading-none">Harvest by {p.farmer?.first_name || 'Agro Farmer'}</p>
+                                        <p className="text-[8px] font-black text-amber uppercase mt-1.5 truncate max-w-[120px]">📍 {p.address || 'Local Field'}</p>
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <p className="text-sm font-black text-green-deep">₹{p.user_price}</p>
-                                    <p className="text-[8px] font-black text-amber uppercase mb-2 truncate max-w-[80px]">📍 {p.address || 'Local'}</p>
+                                    <p className="text-md font-black text-green-deep">₹{p.user_price}</p>
                                     <button 
                                         onClick={() => handleBuyProduct(p)} 
-                                        className="text-[9px] font-black uppercase text-amber bg-amber/10 px-2 py-0.5 rounded hover:bg-amber hover:text-white transition-all"
+                                        className="mt-2 text-[9px] font-black uppercase text-amber bg-amber/10 px-3 py-1 rounded-xl hover:bg-amber hover:text-white transition-all shadow-sm border border-amber/10"
                                     >
-                                        Order
+                                        Request →
                                     </button>
                                 </div>
                             </div>
@@ -1075,7 +1075,9 @@ const BuyerDashboard = () => {
                                       </div>
                                       <div className="flex-1">
                                           <div className="flex justify-between items-center">
-                                              <p className="text-[9px] font-black uppercase text-gray-400">Sold By Master Farmer</p>
+                                              <p className="text-[9px] font-black uppercase text-gray-400">
+                                                  Sold By {selectedProduct.farmer?.first_name || 'Agro'} {selectedProduct.farmer?.last_name || 'Farmer'}
+                                              </p>
                                               <span className="text-[8px] font-black text-amber bg-white px-2 py-0.5 rounded-full border border-amber/10 shadow-sm uppercase">
                                                   ID: AGRO-{selectedProduct.farmer_id?.substring(0, 8).toUpperCase() || 'PRO'}
                                               </span>
